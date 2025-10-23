@@ -5,7 +5,7 @@ const MongoStore = require('connect-mongo');
 require('dotenv').config();
 
 const connectDB = require('./database');
-const { passport, isAuthenticated } = require('./auth');
+const { passport, isAuthenticated, isAdmin, isOwner } = require('./auth');
 const G2GAPI = require('./g2g-api');
 
 // Import Models
@@ -18,6 +18,7 @@ const Product = require('./models/Product');
 const InventoryItem = require('./models/InventoryItem');
 const WebhookLog = require('./models/WebhookLog');
 const User = require('./models/User');
+const ActivityLog = require('./models/ActivityLog');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -64,132 +65,20 @@ async function getG2GClient() {
 
 // ===== ROOT ROUTE =====
 
-// Welcome page
+// API Status endpoint
 app.get('/', (req, res) => {
-  const dbStatus = mongoose.connection.readyState === 1 ? '✅ Connected' : '❌ Disconnected';
-  const authStatus = req.isAuthenticated() ? '✅ Authenticated' : '🔓 Not authenticated';
-  
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>G2G CRM Backend API</title>
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          max-width: 900px;
-          margin: 50px auto;
-          padding: 20px;
-          background: #0d1117;
-          color: #c9d1d9;
-        }
-        h1 { color: #58a6ff; margin-bottom: 10px; }
-        h2 { color: #8b949e; font-size: 1.2em; margin-top: 30px; }
-        .status { 
-          background: #161b22; 
-          padding: 15px; 
-          border-radius: 6px; 
-          margin: 20px 0;
-          border: 1px solid #30363d;
-        }
-        .endpoint {
-          background: #161b22;
-          padding: 10px 15px;
-          margin: 8px 0;
-          border-radius: 6px;
-          border-left: 3px solid #58a6ff;
-        }
-        .endpoint a {
-          color: #58a6ff;
-          text-decoration: none;
-        }
-        .endpoint a:hover {
-          text-decoration: underline;
-        }
-        code {
-          background: #161b22;
-          padding: 2px 6px;
-          border-radius: 3px;
-          color: #79c0ff;
-        }
-        .badge {
-          display: inline-block;
-          padding: 4px 8px;
-          border-radius: 12px;
-          font-size: 0.85em;
-          font-weight: 600;
-          margin-left: 10px;
-        }
-        .badge.success { background: #238636; color: white; }
-        .badge.warning { background: #9e6a03; color: white; }
-        .badge.info { background: #1f6feb; color: white; }
-      </style>
-    </head>
-    <body>
-      <h1>🚀 G2G CRM Backend API</h1>
-      <p>MongoDB + Discord OAuth + Express API</p>
-      
-      <div class="status">
-        <h2>📊 Status</h2>
-        <p><strong>Database:</strong> ${dbStatus}</p>
-        <p><strong>Authentication:</strong> ${authStatus}</p>
-        <p><strong>Environment:</strong> ${process.env.NODE_ENV || 'development'}</p>
-      </div>
-
-      <h2>🔐 Authentication</h2>
-      <div class="endpoint">
-        <a href="/auth/discord">Login with Discord</a>
-        <span class="badge info">PUBLIC</span>
-      </div>
-      <div class="endpoint">
-        <a href="/auth/status">Check Auth Status</a>
-        <span class="badge info">PUBLIC</span>
-      </div>
-      <div class="endpoint">
-        <a href="/auth/user">Get Current User</a>
-        <span class="badge warning">PROTECTED</span>
-      </div>
-
-      <h2>📡 API Endpoints</h2>
-      <div class="endpoint">
-        <a href="/api/health">Health Check</a>
-        <span class="badge success">PUBLIC</span>
-      </div>
-      <div class="endpoint">
-        <code>GET /api/settings</code> - Configuration settings
-        <span class="badge warning">PROTECTED</span>
-      </div>
-      <div class="endpoint">
-        <code>GET /api/orders</code> - Get all orders
-        <span class="badge warning">PROTECTED</span>
-      </div>
-      <div class="endpoint">
-        <code>GET /api/offers</code> - Get all offers
-        <span class="badge warning">PROTECTED</span>
-      </div>
-      <div class="endpoint">
-        <code>GET /api/services</code> - Get all services
-        <span class="badge warning">PROTECTED</span>
-      </div>
-      <div class="endpoint">
-        <code>GET /api/products</code> - Get all products
-        <span class="badge warning">PROTECTED</span>
-      </div>
-      <div class="endpoint">
-        <code>GET /api/stats</code> - Get statistics
-        <span class="badge warning">PROTECTED</span>
-      </div>
-
-      <h2>📚 Documentation</h2>
-      <p>Full API documentation available in the repository README</p>
-      <p><a href="https://github.com/itsnavido/g2gcrm" style="color: #58a6ff;">View on GitHub</a></p>
-
-      <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #30363d; color: #8b949e; font-size: 0.9em;">
-        <p>G2G CRM Backend v1.0.0 | Built with Express + MongoDB + Passport.js</p>
-      </div>
-    </body>
-    </html>
-  `);
+  res.json({
+    success: true,
+    message: 'G2G CRM Backend API',
+    authenticated: req.isAuthenticated(),
+    role: req.user?.role || null,
+    status: req.user?.status || null,
+    endpoints: {
+      auth: '/auth/discord',
+      health: '/api/health',
+      docs: 'https://github.com/itsnavido/g2gcrm'
+    }
+  });
 });
 
 // ===== AUTH ROUTES =====
@@ -228,7 +117,9 @@ app.get('/auth/user', (req, res) => {
         username: req.user.username,
         discriminator: req.user.discriminator,
         avatar: req.user.avatar,
-        email: req.user.email
+        email: req.user.email,
+        role: req.user.role,
+        status: req.user.status
       }
     });
   } else {
@@ -243,8 +134,321 @@ app.get('/auth/user', (req, res) => {
 app.get('/auth/status', (req, res) => {
   res.json({
     success: true,
-    authenticated: req.isAuthenticated()
+    authenticated: req.isAuthenticated(),
+    role: req.user?.role || null,
+    status: req.user?.status || null
   });
+});
+
+// ===== ADMIN ROUTES =====
+
+// Get all users (Admin only)
+app.get('/api/admin/users', isAdmin, async (req, res) => {
+  try {
+    const users = await User.find()
+      .select('-access_token -refresh_token')
+      .sort({ createdAt: -1 });
+    
+    res.json({
+      success: true,
+      data: users
+    });
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch users'
+    });
+  }
+});
+
+// Approve user (Admin only)
+app.post('/api/admin/users/:id/approve', isAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+    
+    if (user.status === 'approved') {
+      return res.json({
+        success: true,
+        message: 'User already approved',
+        data: user
+      });
+    }
+    
+    user.status = 'approved';
+    user.approved_by = req.user._id;
+    user.approved_at = new Date();
+    await user.save();
+    
+    // Log activity
+    await ActivityLog.create({
+      user_id: req.user._id,
+      action: 'approve_user',
+      target_user_id: user._id,
+      details: {
+        username: user.username,
+        discord_id: user.discord_id
+      }
+    });
+    
+    res.json({
+      success: true,
+      message: 'User approved successfully',
+      data: user
+    });
+  } catch (error) {
+    console.error('Error approving user:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to approve user'
+    });
+  }
+});
+
+// Ban user (Admin only)
+app.post('/api/admin/users/:id/ban', isAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+    
+    if (user.role === 'owner') {
+      return res.status(403).json({
+        success: false,
+        error: 'Cannot ban the owner'
+      });
+    }
+    
+    if (user.role === 'admin' && req.user.role !== 'owner') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only owner can ban admins'
+      });
+    }
+    
+    user.status = 'banned';
+    await user.save();
+    
+    // Log activity
+    await ActivityLog.create({
+      user_id: req.user._id,
+      action: 'ban_user',
+      target_user_id: user._id,
+      details: {
+        username: user.username,
+        discord_id: user.discord_id
+      }
+    });
+    
+    res.json({
+      success: true,
+      message: 'User banned successfully',
+      data: user
+    });
+  } catch (error) {
+    console.error('Error banning user:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to ban user'
+    });
+  }
+});
+
+// Unban user (Admin only)
+app.post('/api/admin/users/:id/unban', isAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+    
+    if (user.status !== 'banned') {
+      return res.json({
+        success: true,
+        message: 'User is not banned',
+        data: user
+      });
+    }
+    
+    user.status = 'approved';
+    await user.save();
+    
+    // Log activity
+    await ActivityLog.create({
+      user_id: req.user._id,
+      action: 'unban_user',
+      target_user_id: user._id,
+      details: {
+        username: user.username,
+        discord_id: user.discord_id
+      }
+    });
+    
+    res.json({
+      success: true,
+      message: 'User unbanned successfully',
+      data: user
+    });
+  } catch (error) {
+    console.error('Error unbanning user:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to unban user'
+    });
+  }
+});
+
+// Promote to admin (Owner only)
+app.post('/api/admin/users/:id/promote', isOwner, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+    
+    if (user.role === 'owner') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot change owner role'
+      });
+    }
+    
+    if (user.role === 'admin') {
+      return res.json({
+        success: true,
+        message: 'User is already an admin',
+        data: user
+      });
+    }
+    
+    user.role = 'admin';
+    user.status = 'approved'; // Auto-approve admins
+    await user.save();
+    
+    // Log activity
+    await ActivityLog.create({
+      user_id: req.user._id,
+      action: 'promote_admin',
+      target_user_id: user._id,
+      details: {
+        username: user.username,
+        discord_id: user.discord_id,
+        previous_role: 'user'
+      }
+    });
+    
+    res.json({
+      success: true,
+      message: 'User promoted to admin successfully',
+      data: user
+    });
+  } catch (error) {
+    console.error('Error promoting user:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to promote user'
+    });
+  }
+});
+
+// Demote from admin (Owner only)
+app.post('/api/admin/users/:id/demote', isOwner, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+    
+    if (user.role === 'owner') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot change owner role'
+      });
+    }
+    
+    if (user.role === 'user') {
+      return res.json({
+        success: true,
+        message: 'User is not an admin',
+        data: user
+      });
+    }
+    
+    user.role = 'user';
+    await user.save();
+    
+    // Log activity
+    await ActivityLog.create({
+      user_id: req.user._id,
+      action: 'demote_admin',
+      target_user_id: user._id,
+      details: {
+        username: user.username,
+        discord_id: user.discord_id,
+        previous_role: 'admin'
+      }
+    });
+    
+    res.json({
+      success: true,
+      message: 'User demoted to regular user successfully',
+      data: user
+    });
+  } catch (error) {
+    console.error('Error demoting user:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to demote user'
+    });
+  }
+});
+
+// Get activity logs (Admin only)
+app.get('/api/admin/logs', isAdmin, async (req, res) => {
+  try {
+    const { limit = 100 } = req.query;
+    
+    const logs = await ActivityLog.find()
+      .populate('user_id', 'username discord_id avatar role')
+      .populate('target_user_id', 'username discord_id avatar role')
+      .sort({ timestamp: -1 })
+      .limit(parseInt(limit));
+    
+    res.json({
+      success: true,
+      data: logs
+    });
+  } catch (error) {
+    console.error('Error fetching activity logs:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch activity logs'
+    });
+  }
 });
 
 // ===== SETTINGS ROUTES (Protected) =====

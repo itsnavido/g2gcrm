@@ -13,10 +13,26 @@ const userSchema = new mongoose.Schema({
   email: String,
   access_token: String,
   refresh_token: String,
+  role: {
+    type: String,
+    enum: ['user', 'admin', 'owner'],
+    default: 'user'
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'banned'],
+    default: 'pending'
+  },
+  approved_by: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  approved_at: Date,
   last_login: {
     type: Date,
     default: Date.now
-  }
+  },
+  last_activity: Date
 }, {
   timestamps: true
 });

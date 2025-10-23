@@ -11,6 +11,8 @@ passport.use(new DiscordStrategy({
   },
   async (accessToken, refreshToken, profile, done) => {
     try {
+      const OWNER_DISCORD_ID = '339703905166426114';
+      
       // Find or create user
       let user = await User.findOne({ discord_id: profile.id });
       
@@ -23,9 +25,19 @@ passport.use(new DiscordStrategy({
         user.access_token = accessToken;
         user.refresh_token = refreshToken;
         user.last_login = new Date();
+        user.last_activity = new Date();
+        
+        // Set owner role if this is the owner's first login after update
+        if (profile.id === OWNER_DISCORD_ID && user.role !== 'owner') {
+          user.role = 'owner';
+          user.status = 'approved';
+        }
+        
         await user.save();
       } else {
-        // Create new user
+        // Create new user with appropriate role and status
+        const isOwner = profile.id === OWNER_DISCORD_ID;
+        
         user = await User.create({
           discord_id: profile.id,
           username: profile.username,
@@ -34,7 +46,10 @@ passport.use(new DiscordStrategy({
           email: profile.email,
           access_token: accessToken,
           refresh_token: refreshToken,
-          last_login: new Date()
+          role: isOwner ? 'owner' : 'user',
+          status: isOwner ? 'approved' : 'pending',
+          last_login: new Date(),
+          last_activity: new Date()
         });
       }
       
@@ -60,19 +75,78 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
-// Auth middleware
+// Auth middleware - checks if user is authenticated AND approved
 const isAuthenticated = (req, res, next) => {
-  if (req.isAuthenticated()) {
-    return next();
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({
+      success: false,
+      error: 'Not authenticated. Please login with Discord.'
+    });
   }
-  res.status(401).json({
-    success: false,
-    error: 'Not authenticated. Please login with Discord.'
-  });
+  
+  if (req.user.status !== 'approved') {
+    return res.status(403).json({
+      success: false,
+      error: 'Access pending approval. Please wait for admin approval.'
+    });
+  }
+  
+  if (req.user.status === 'banned') {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied. Your account has been banned.'
+    });
+  }
+  
+  // Update last activity
+  req.user.last_activity = new Date();
+  req.user.save().catch(err => console.error('Error updating last activity:', err));
+  
+  return next();
+};
+
+// Admin middleware - checks if user is admin or owner
+const isAdmin = (req, res, next) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({
+      success: false,
+      error: 'Not authenticated. Please login with Discord.'
+    });
+  }
+  
+  if (req.user.role !== 'admin' && req.user.role !== 'owner') {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied. Admin privileges required.'
+    });
+  }
+  
+  return next();
+};
+
+// Owner middleware - checks if user is owner
+const isOwner = (req, res, next) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({
+      success: false,
+      error: 'Not authenticated. Please login with Discord.'
+    });
+  }
+  
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied. Owner privileges required.'
+    });
+  }
+  
+  return next();
 };
 
 module.exports = {
   passport,
-  isAuthenticated
+  isAuthenticated,
+  isAdmin,
+  isOwner
 };
 

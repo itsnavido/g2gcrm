@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Toast from './components/Toast';
@@ -10,15 +10,58 @@ import Inventory from './pages/Inventory';
 import Webhooks from './pages/Webhooks';
 import Store from './pages/Store';
 import Settings from './pages/Settings';
+import Login from './pages/Login';
+import AccessDenied from './pages/AccessDenied';
+import Admin from './pages/Admin';
 import useSettingsStore from './stores/useSettingsStore';
+import useAuthStore from './stores/useAuthStore';
+import LoadingSpinner from './components/LoadingSpinner';
 
 function App() {
   const { loadSettings } = useSettingsStore();
+  const { user, loading, checkAuth, isAuthenticated, isApproved, isAdmin } = useAuthStore();
 
   useEffect(() => {
+    checkAuth();
     loadSettings();
   }, []);
 
+  // Show loading spinner while checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  // If not authenticated, show login page
+  if (!isAuthenticated()) {
+    return (
+      <Router>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+        <Toast />
+      </Router>
+    );
+  }
+
+  // If authenticated but not approved, show access denied page
+  if (!isApproved()) {
+    return (
+      <Router>
+        <Routes>
+          <Route path="/access-denied" element={<AccessDenied />} />
+          <Route path="*" element={<Navigate to="/access-denied" replace />} />
+        </Routes>
+        <Toast />
+      </Router>
+    );
+  }
+
+  // If authenticated and approved, show full dashboard
   return (
     <Router>
       <div className="flex min-h-screen bg-gray-50">
@@ -34,6 +77,8 @@ function App() {
             <Route path="/webhooks" element={<Webhooks />} />
             <Route path="/store" element={<Store />} />
             <Route path="/settings" element={<Settings />} />
+            {isAdmin() && <Route path="/admin" element={<Admin />} />}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
 
