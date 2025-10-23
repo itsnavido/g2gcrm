@@ -34,7 +34,7 @@ app.use(cors({
 app.use(express.json());
 
 // Session configuration
-app.use(session({
+const sessionConfig = {
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
   resave: false,
   saveUninitialized: false,
@@ -48,7 +48,14 @@ app.use(session({
     secure: process.env.NODE_ENV === 'production',
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
   }
-}));
+};
+
+// In production, add domain for cookie
+if (process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN) {
+  sessionConfig.cookie.domain = process.env.COOKIE_DOMAIN;
+}
+
+app.use(session(sessionConfig));
 
 // Initialize Passport
 app.use(passport.initialize());
