@@ -1,6 +1,6 @@
-# 🚀 Setup Guide for g2gcrm-backend.vercel.app
+# 🚀 Setup Guide for g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app
 
-**Your Backend**: https://g2gcrm-backend.vercel.app/
+**Your Backend**: https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/
 
 ## ⚡ Quick Setup (10 Minutes)
 
@@ -25,7 +25,7 @@
 5. Add Redirects:
    ```
    http://localhost:3000/auth/discord/callback
-   https://g2gcrm-backend.vercel.app/auth/discord/callback
+   https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/auth/discord/callback
    ```
 6. **Save Changes**
 
@@ -39,7 +39,7 @@ Add these **8 variables**:
 MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/g2gcrm?retryWrites=true&w=majority
 DISCORD_CLIENT_ID=your_app_id_from_step2
 DISCORD_CLIENT_SECRET=your_secret_from_step2
-DISCORD_CALLBACK_URL=https://g2gcrm-backend.vercel.app/auth/discord/callback
+DISCORD_CALLBACK_URL=https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/auth/discord/callback
 SESSION_SECRET=run: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 NODE_ENV=production
 CORS_ORIGIN=http://localhost:5173
@@ -91,13 +91,13 @@ Vercel auto-deploys! ✅
 
 **Test Backend**:
 ```
-https://g2gcrm-backend.vercel.app/api/health
+https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/api/health
 ```
 Should show: `"database": "connected"` ✅
 
 **Test Login**:
 ```
-https://g2gcrm-backend.vercel.app/auth/discord
+https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/auth/discord
 ```
 Should redirect to Discord ✅
 
@@ -110,7 +110,7 @@ Should redirect to Discord ✅
 3. Framework: Vite
 4. Environment Variables:
    ```
-   VITE_API_URL=https://g2gcrm-backend.vercel.app
+   VITE_API_URL=https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app
    VITE_DISCORD_CLIENT_ID=your_app_id
    ```
 5. Deploy!
@@ -147,9 +147,9 @@ ls server*.js
 
 | What | URL |
 |------|-----|
-| Backend API | https://g2gcrm-backend.vercel.app |
-| Health Check | https://g2gcrm-backend.vercel.app/api/health |
-| Discord Login | https://g2gcrm-backend.vercel.app/auth/discord |
+| Backend API | https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app |
+| Health Check | https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/api/health |
+| Discord Login | https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/auth/discord |
 | MongoDB Atlas | https://cloud.mongodb.com |
 | Discord Dev | https://discord.com/developers/applications |
 

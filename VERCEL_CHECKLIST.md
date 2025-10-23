@@ -1,6 +1,6 @@
 # ✅ Vercel Deployment Checklist
 
-Your backend: **https://g2gcrm-backend.vercel.app/**
+Your backend: **https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/**
 
 ## 📋 Pre-Deployment Checklist
 
@@ -23,7 +23,7 @@ mongodb+srv://username:PASSWORD@cluster.mongodb.net/g2gcrm?retryWrites=true&w=ma
 - [ ] Copied Application ID (Client ID)
 - [ ] Generated and copied Client Secret
 - [ ] Added redirect URL: `http://localhost:3000/auth/discord/callback`
-- [ ] Added redirect URL: `https://g2gcrm-backend.vercel.app/auth/discord/callback`
+- [ ] Added redirect URL: `https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/auth/discord/callback`
 - [ ] Saved changes in Discord portal
 
 ### 3. Session Secret
@@ -54,7 +54,7 @@ Add these **8 variables**:
 - [ ] `MONGODB_URI` = `mongodb+srv://...`
 - [ ] `DISCORD_CLIENT_ID` = `your_application_id`
 - [ ] `DISCORD_CLIENT_SECRET` = `your_client_secret`
-- [ ] `DISCORD_CALLBACK_URL` = `https://g2gcrm-backend.vercel.app/auth/discord/callback`
+- [ ] `DISCORD_CALLBACK_URL` = `https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/auth/discord/callback`
 - [ ] `SESSION_SECRET` = `your_generated_hex_string`
 - [ ] `NODE_ENV` = `production`
 - [ ] `CORS_ORIGIN` = `http://localhost:5173` (or your frontend URL)
@@ -68,9 +68,9 @@ Add these **8 variables**:
 - [ ] Wait for deployment to complete
 
 ### 7. Verify Deployment
-- [ ] Visit: https://g2gcrm-backend.vercel.app/api/health
+- [ ] Visit: https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/api/health
 - [ ] Check response shows: `"database": "connected"`
-- [ ] Visit: https://g2gcrm-backend.vercel.app/auth/discord
+- [ ] Visit: https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/auth/discord
 - [ ] Discord login screen appears
 - [ ] Can authorize application
 - [ ] Redirects successfully
@@ -85,7 +85,7 @@ Add these **8 variables**:
 MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/g2gcrm?retryWrites=true&w=majority
 DISCORD_CLIENT_ID=123456789012345678
 DISCORD_CLIENT_SECRET=your_secret_here
-DISCORD_CALLBACK_URL=https://g2gcrm-backend.vercel.app/auth/discord/callback
+DISCORD_CALLBACK_URL=https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/auth/discord/callback
 SESSION_SECRET=your_random_hex_string_32_characters
 NODE_ENV=production
 CORS_ORIGIN=http://localhost:5173
@@ -125,7 +125,7 @@ git push
 **Check**:
 1. Discord redirect URLs include:
    - `http://localhost:3000/auth/discord/callback`
-   - `https://g2gcrm-backend.vercel.app/auth/discord/callback`
+   - `https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/auth/discord/callback`
 2. Both URLs saved in Discord portal
 3. No typos in URLs
 
@@ -145,9 +145,9 @@ Check these URLs:
 
 | Endpoint | Expected Result |
 |----------|----------------|
-| https://g2gcrm-backend.vercel.app/api/health | `{"status":"ok","database":"connected"}` |
-| https://g2gcrm-backend.vercel.app/auth/discord | Redirects to Discord |
-| https://g2gcrm-backend.vercel.app/auth/status | `{"authenticated":false}` |
+| https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/api/health | `{"status":"ok","database":"connected"}` |
+| https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/auth/discord | Redirects to Discord |
+| https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/auth/status | `{"authenticated":false}` |
 
 ---
 
@@ -181,7 +181,7 @@ Your deployment is successful when:
 
 ## 📞 Quick Links
 
-- **Your Backend**: https://g2gcrm-backend.vercel.app/
+- **Your Backend**: https://g2gcrm-backend-3dv1y3u22-navidams-projects.vercel.app/
 - **MongoDB Atlas**: https://cloud.mongodb.com
 - **Discord Developer**: https://discord.com/developers/applications
 - **Vercel Dashboard**: https://vercel.com/dashboard
