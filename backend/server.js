@@ -62,6 +62,136 @@ async function getG2GClient() {
   return new G2GAPI(setting.api_key, setting.api_base_url);
 }
 
+// ===== ROOT ROUTE =====
+
+// Welcome page
+app.get('/', (req, res) => {
+  const dbStatus = mongoose.connection.readyState === 1 ? '✅ Connected' : '❌ Disconnected';
+  const authStatus = req.isAuthenticated() ? '✅ Authenticated' : '🔓 Not authenticated';
+  
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>G2G CRM Backend API</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          max-width: 900px;
+          margin: 50px auto;
+          padding: 20px;
+          background: #0d1117;
+          color: #c9d1d9;
+        }
+        h1 { color: #58a6ff; margin-bottom: 10px; }
+        h2 { color: #8b949e; font-size: 1.2em; margin-top: 30px; }
+        .status { 
+          background: #161b22; 
+          padding: 15px; 
+          border-radius: 6px; 
+          margin: 20px 0;
+          border: 1px solid #30363d;
+        }
+        .endpoint {
+          background: #161b22;
+          padding: 10px 15px;
+          margin: 8px 0;
+          border-radius: 6px;
+          border-left: 3px solid #58a6ff;
+        }
+        .endpoint a {
+          color: #58a6ff;
+          text-decoration: none;
+        }
+        .endpoint a:hover {
+          text-decoration: underline;
+        }
+        code {
+          background: #161b22;
+          padding: 2px 6px;
+          border-radius: 3px;
+          color: #79c0ff;
+        }
+        .badge {
+          display: inline-block;
+          padding: 4px 8px;
+          border-radius: 12px;
+          font-size: 0.85em;
+          font-weight: 600;
+          margin-left: 10px;
+        }
+        .badge.success { background: #238636; color: white; }
+        .badge.warning { background: #9e6a03; color: white; }
+        .badge.info { background: #1f6feb; color: white; }
+      </style>
+    </head>
+    <body>
+      <h1>🚀 G2G CRM Backend API</h1>
+      <p>MongoDB + Discord OAuth + Express API</p>
+      
+      <div class="status">
+        <h2>📊 Status</h2>
+        <p><strong>Database:</strong> ${dbStatus}</p>
+        <p><strong>Authentication:</strong> ${authStatus}</p>
+        <p><strong>Environment:</strong> ${process.env.NODE_ENV || 'development'}</p>
+      </div>
+
+      <h2>🔐 Authentication</h2>
+      <div class="endpoint">
+        <a href="/auth/discord">Login with Discord</a>
+        <span class="badge info">PUBLIC</span>
+      </div>
+      <div class="endpoint">
+        <a href="/auth/status">Check Auth Status</a>
+        <span class="badge info">PUBLIC</span>
+      </div>
+      <div class="endpoint">
+        <a href="/auth/user">Get Current User</a>
+        <span class="badge warning">PROTECTED</span>
+      </div>
+
+      <h2>📡 API Endpoints</h2>
+      <div class="endpoint">
+        <a href="/api/health">Health Check</a>
+        <span class="badge success">PUBLIC</span>
+      </div>
+      <div class="endpoint">
+        <code>GET /api/settings</code> - Configuration settings
+        <span class="badge warning">PROTECTED</span>
+      </div>
+      <div class="endpoint">
+        <code>GET /api/orders</code> - Get all orders
+        <span class="badge warning">PROTECTED</span>
+      </div>
+      <div class="endpoint">
+        <code>GET /api/offers</code> - Get all offers
+        <span class="badge warning">PROTECTED</span>
+      </div>
+      <div class="endpoint">
+        <code>GET /api/services</code> - Get all services
+        <span class="badge warning">PROTECTED</span>
+      </div>
+      <div class="endpoint">
+        <code>GET /api/products</code> - Get all products
+        <span class="badge warning">PROTECTED</span>
+      </div>
+      <div class="endpoint">
+        <code>GET /api/stats</code> - Get statistics
+        <span class="badge warning">PROTECTED</span>
+      </div>
+
+      <h2>📚 Documentation</h2>
+      <p>Full API documentation available in the repository README</p>
+      <p><a href="https://github.com/itsnavido/g2gcrm" style="color: #58a6ff;">View on GitHub</a></p>
+
+      <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #30363d; color: #8b949e; font-size: 0.9em;">
+        <p>G2G CRM Backend v1.0.0 | Built with Express + MongoDB + Passport.js</p>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
 // ===== AUTH ROUTES =====
 
 // Discord OAuth login
