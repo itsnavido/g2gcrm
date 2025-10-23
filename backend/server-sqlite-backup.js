@@ -1,131 +1,51 @@
 const express = require('express');
 const cors = require('cors');
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
+const path = require('path');
 require('dotenv').config();
 
-const connectDB = require('./database');
-const { passport, isAuthenticated } = require('./auth');
-const G2GAPI = require('./g2g-api');
+const {
+  initDatabase,
+  settingsOps,
+  ordersOps,
+  offersOps,
+  servicesOps,
+  brandsOps,
+  productsOps,
+  inventoryOps,
+  webhookLogsOps,
+  clearAllCache
+} = require('./database');
 
-// Import Models
-const Setting = require('./models/Setting');
-const Order = require('./models/Order');
-const Offer = require('./models/Offer');
-const Service = require('./models/Service');
-const Brand = require('./models/Brand');
-const Product = require('./models/Product');
-const InventoryItem = require('./models/InventoryItem');
-const WebhookLog = require('./models/WebhookLog');
-const User = require('./models/User');
+const G2GAPI = require('./g2g-api');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Connect to MongoDB
-connectDB();
-
 // Middleware
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-  credentials: true
-}));
+app.use(cors());
 app.use(express.json());
 
-// Session configuration
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
-  resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/g2g-crm',
-    ttl: 14 * 24 * 60 * 60 // 14 days
-  }),
-  cookie: {
-    maxAge: 14 * 24 * 60 * 60 * 1000, // 14 days
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
-  }
-}));
-
-// Initialize Passport
-app.use(passport.initialize());
-app.use(passport.session());
+// Initialize database
+initDatabase();
 
 // Helper to get G2G API client
-async function getG2GClient() {
-  const setting = await Setting.findOne().sort({ createdAt: -1 });
-  if (!setting || !setting.api_key) {
+function getG2GClient() {
+  const settings = settingsOps.get();
+  if (!settings || !settings.api_key) {
     throw new Error('API key not configured. Please configure in Settings.');
   }
-  return new G2GAPI(setting.api_key, setting.api_base_url);
+  return new G2GAPI(settings.api_key, settings.api_base_url);
 }
 
-// ===== AUTH ROUTES =====
-
-// Discord OAuth login
-app.get('/auth/discord', passport.authenticate('discord'));
-
-// Discord OAuth callback
-app.get('/auth/discord/callback',
-  passport.authenticate('discord', {
-    failureRedirect: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=auth_failed`
-  }),
-  (req, res) => {
-    // Successful authentication
-    res.redirect(process.env.FRONTEND_URL || 'http://localhost:5173');
-  }
-);
-
-// Logout
-app.post('/auth/logout', (req, res) => {
-  req.logout((err) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: 'Logout failed' });
-    }
-    res.json({ success: true, message: 'Logged out successfully' });
-  });
-});
-
-// Get current user
-app.get('/auth/user', (req, res) => {
-  if (req.isAuthenticated()) {
-    res.json({
-      success: true,
-      user: {
-        id: req.user.discord_id,
-        username: req.user.username,
-        discriminator: req.user.discriminator,
-        avatar: req.user.avatar,
-        email: req.user.email
-      }
-    });
-  } else {
-    res.status(401).json({
-      success: false,
-      error: 'Not authenticated'
-    });
-  }
-});
-
-// Check auth status
-app.get('/auth/status', (req, res) => {
-  res.json({
-    success: true,
-    authenticated: req.isAuthenticated()
-  });
-});
-
-// ===== SETTINGS ROUTES (Protected) =====
+// ===== SETTINGS ROUTES =====
 
 // Get settings
-app.get('/api/settings', isAuthenticated, async (req, res) => {
+app.get('/api/settings', (req, res) => {
   try {
-    const setting = await Setting.findOne().sort({ createdAt: -1 });
+    const settings = settingsOps.get();
     res.json({
       success: true,
-      data: setting || { api_base_url: 'https://prod.your-api-server.com' }
+      data: settings || { api_base_url: 'https://prod.your-api-server.com' }
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -133,7 +53,7 @@ app.get('/api/settings', isAuthenticated, async (req, res) => {
 });
 
 // Save settings
-app.post('/api/settings', isAuthenticated, async (req, res) => {
+app.post('/api/settings', (req, res) => {
   try {
     const { api_key, api_base_url } = req.body;
     
@@ -141,17 +61,11 @@ app.post('/api/settings', isAuthenticated, async (req, res) => {
       return res.status(400).json({ success: false, error: 'API key is required' });
     }
 
-    // Delete all existing settings and create new one
-    await Setting.deleteMany({});
-    const setting = await Setting.create({
-      api_key,
-      api_base_url: api_base_url || 'https://prod.your-api-server.com'
-    });
+    settingsOps.upsert(api_key, api_base_url || 'https://prod.your-api-server.com');
     
     res.json({
       success: true,
-      message: 'Settings saved successfully',
-      data: setting
+      message: 'Settings saved successfully'
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -159,7 +73,7 @@ app.post('/api/settings', isAuthenticated, async (req, res) => {
 });
 
 // Test connection
-app.post('/api/settings/test', isAuthenticated, async (req, res) => {
+app.post('/api/settings/test', async (req, res) => {
   try {
     const { api_key, api_base_url } = req.body;
     const client = new G2GAPI(api_key, api_base_url);
@@ -177,32 +91,27 @@ app.post('/api/settings/test', isAuthenticated, async (req, res) => {
 });
 
 // Clear cache
-app.post('/api/settings/clear-cache', isAuthenticated, async (req, res) => {
+app.post('/api/settings/clear-cache', (req, res) => {
   try {
-    await Promise.all([
-      Order.deleteMany({}),
-      Offer.deleteMany({}),
-      Service.deleteMany({}),
-      Brand.deleteMany({}),
-      Product.deleteMany({}),
-      InventoryItem.deleteMany({}),
-      WebhookLog.deleteMany({})
-    ]);
+    clearAllCache();
     res.json({ success: true, message: 'Cache cleared successfully' });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// ===== ORDERS ROUTES (Protected) =====
+// ===== ORDERS ROUTES =====
 
 // Get all cached orders
-app.get('/api/orders', isAuthenticated, async (req, res) => {
+app.get('/api/orders', (req, res) => {
   try {
-    const orders = await Order.find().sort({ created_at: -1 });
+    const orders = ordersOps.getAll();
     res.json({
       success: true,
-      data: orders
+      data: orders.map(order => ({
+        ...order,
+        data_json: order.data_json ? JSON.parse(order.data_json) : null
+      }))
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -210,34 +119,33 @@ app.get('/api/orders', isAuthenticated, async (req, res) => {
 });
 
 // Get specific order (with caching)
-app.get('/api/orders/:order_id', isAuthenticated, async (req, res) => {
+app.get('/api/orders/:order_id', async (req, res) => {
   try {
     const { order_id } = req.params;
     const { refresh } = req.query;
     
     // Check cache first
     if (!refresh) {
-      const cached = await Order.findOne({ order_id });
+      const cached = ordersOps.get(order_id);
       if (cached) {
         return res.json({
           success: true,
-          data: cached,
+          data: {
+            ...cached,
+            data_json: cached.data_json ? JSON.parse(cached.data_json) : null
+          },
           cached: true
         });
       }
     }
     
     // Fetch from API
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.getOrder(order_id);
     
     if (result.code === 20000001 && result.payload) {
       // Save to cache
-      await Order.findOneAndUpdate(
-        { order_id },
-        { ...result.payload, fetched_at: Date.now() },
-        { upsert: true, new: true }
-      );
+      ordersOps.upsert(result.payload);
       
       res.json({
         success: true,
@@ -256,23 +164,19 @@ app.get('/api/orders/:order_id', isAuthenticated, async (req, res) => {
 });
 
 // Deliver codes to order
-app.post('/api/orders/:order_id/delivery', isAuthenticated, async (req, res) => {
+app.post('/api/orders/:order_id/delivery', async (req, res) => {
   try {
     const { order_id } = req.params;
     const deliveryData = req.body;
     
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.deliverCode(order_id, deliveryData);
     
     if (result.code === 20000001) {
       // Refresh order cache
       const orderResult = await client.getOrder(order_id);
       if (orderResult.payload) {
-        await Order.findOneAndUpdate(
-          { order_id },
-          { ...orderResult.payload, fetched_at: Date.now() },
-          { upsert: true }
-        );
+        ordersOps.upsert(orderResult.payload);
       }
       
       res.json({ success: true, data: result.payload });
@@ -287,15 +191,43 @@ app.post('/api/orders/:order_id/delivery', isAuthenticated, async (req, res) => 
   }
 });
 
-// ===== OFFERS ROUTES (Protected) =====
+// Get delivery status
+app.get('/api/orders/:order_id/delivery/:delivery_id', async (req, res) => {
+  try {
+    const { order_id, delivery_id } = req.params;
+    
+    const client = getG2GClient();
+    const result = await client.getDeliveryStatus(order_id, delivery_id);
+    
+    if (result.code === 20000001) {
+      res.json({ success: true, data: result.payload });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: result.message || 'Delivery not found'
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ===== OFFERS ROUTES =====
 
 // Get all cached offers
-app.get('/api/offers', isAuthenticated, async (req, res) => {
+app.get('/api/offers', async (req, res) => {
   try {
-    const offers = await Offer.find().sort({ created_at: -1 });
+    const { refresh } = req.query;
+    
+    const cached = offersOps.getAll();
+    
     res.json({
       success: true,
-      data: offers
+      data: cached.map(offer => ({
+        ...offer,
+        data_json: offer.data_json ? JSON.parse(offer.data_json) : null
+      })),
+      cached: !refresh
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -303,34 +235,33 @@ app.get('/api/offers', isAuthenticated, async (req, res) => {
 });
 
 // Get specific offer
-app.get('/api/offers/:offer_id', isAuthenticated, async (req, res) => {
+app.get('/api/offers/:offer_id', async (req, res) => {
   try {
     const { offer_id } = req.params;
     const { refresh } = req.query;
     
     // Check cache first
     if (!refresh) {
-      const cached = await Offer.findOne({ offer_id });
+      const cached = offersOps.get(offer_id);
       if (cached) {
         return res.json({
           success: true,
-          data: cached,
+          data: {
+            ...cached,
+            data_json: cached.data_json ? JSON.parse(cached.data_json) : null
+          },
           cached: true
         });
       }
     }
     
     // Fetch from API
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.getOffer(offer_id);
     
     if (result.code === 20000001 && result.payload) {
       // Save to cache
-      await Offer.findOneAndUpdate(
-        { offer_id },
-        { ...result.payload, fetched_at: Date.now() },
-        { upsert: true, new: true }
-      );
+      offersOps.upsert(result.payload);
       
       res.json({
         success: true,
@@ -349,20 +280,16 @@ app.get('/api/offers/:offer_id', isAuthenticated, async (req, res) => {
 });
 
 // Create offer
-app.post('/api/offers', isAuthenticated, async (req, res) => {
+app.post('/api/offers', async (req, res) => {
   try {
     const offerData = req.body;
     
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.createOffer(offerData);
     
     if (result.code === 20000001 && result.payload) {
       // Save to cache
-      await Offer.findOneAndUpdate(
-        { offer_id: result.payload.offer_id },
-        { ...result.payload, fetched_at: Date.now() },
-        { upsert: true, new: true }
-      );
+      offersOps.upsert(result.payload);
       
       res.json({
         success: true,
@@ -381,21 +308,17 @@ app.post('/api/offers', isAuthenticated, async (req, res) => {
 });
 
 // Update offer
-app.patch('/api/offers/:offer_id', isAuthenticated, async (req, res) => {
+app.patch('/api/offers/:offer_id', async (req, res) => {
   try {
     const { offer_id } = req.params;
     const offerData = req.body;
     
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.updateOffer(offer_id, offerData);
     
     if (result.code === 20000001 && result.payload) {
       // Update cache
-      await Offer.findOneAndUpdate(
-        { offer_id },
-        { ...result.payload, fetched_at: Date.now() },
-        { upsert: true, new: true }
-      );
+      offersOps.upsert(result.payload);
       
       res.json({
         success: true,
@@ -414,16 +337,16 @@ app.patch('/api/offers/:offer_id', isAuthenticated, async (req, res) => {
 });
 
 // Delete offer
-app.delete('/api/offers/:offer_id', isAuthenticated, async (req, res) => {
+app.delete('/api/offers/:offer_id', async (req, res) => {
   try {
     const { offer_id } = req.params;
     
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.deleteOffer(offer_id);
     
     if (result.code === 20000001) {
       // Remove from cache
-      await Offer.deleteOne({ offer_id });
+      offersOps.delete(offer_id);
       
       res.json({
         success: true,
@@ -440,15 +363,15 @@ app.delete('/api/offers/:offer_id', isAuthenticated, async (req, res) => {
   }
 });
 
-// ===== SERVICES ROUTES (Protected) =====
+// ===== SERVICES ROUTES =====
 
-app.get('/api/services', isAuthenticated, async (req, res) => {
+app.get('/api/services', async (req, res) => {
   try {
     const { refresh, language = 'en' } = req.query;
     
     // Check cache
     if (!refresh) {
-      const cached = await Service.find();
+      const cached = servicesOps.getAll();
       if (cached.length > 0) {
         return res.json({
           success: true,
@@ -459,16 +382,13 @@ app.get('/api/services', isAuthenticated, async (req, res) => {
     }
     
     // Fetch from API
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.getServices(language);
     
     if (result.code === 20000001 && result.payload) {
       // Save to cache
       if (result.payload.service_list) {
-        await Service.deleteMany({});
-        await Service.insertMany(
-          result.payload.service_list.map(s => ({...s, fetched_at: Date.now()}))
-        );
+        servicesOps.bulkUpsert(result.payload.service_list);
       }
       
       res.json({
@@ -487,16 +407,16 @@ app.get('/api/services', isAuthenticated, async (req, res) => {
   }
 });
 
-// ===== BRANDS ROUTES (Protected) =====
+// ===== BRANDS ROUTES =====
 
-app.get('/api/brands/:service_id', isAuthenticated, async (req, res) => {
+app.get('/api/brands/:service_id', async (req, res) => {
   try {
     const { service_id } = req.params;
     const { refresh, language = 'en', q = '', after } = req.query;
     
     // Check cache
     if (!refresh && !q && !after) {
-      const cached = await Brand.find({ service_id });
+      const cached = brandsOps.getByService(service_id);
       if (cached.length > 0) {
         return res.json({
           success: true,
@@ -507,16 +427,13 @@ app.get('/api/brands/:service_id', isAuthenticated, async (req, res) => {
     }
     
     // Fetch from API
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.getBrands(service_id, q, after, language);
     
     if (result.code === 20000001 && result.payload) {
       // Save to cache
       if (result.payload.brand_list && !q && !after) {
-        await Brand.deleteMany({ service_id });
-        await Brand.insertMany(
-          result.payload.brand_list.map(b => ({...b, service_id, fetched_at: Date.now()}))
-        );
+        brandsOps.bulkUpsert(result.payload.brand_list, service_id);
       }
       
       res.json({
@@ -536,9 +453,9 @@ app.get('/api/brands/:service_id', isAuthenticated, async (req, res) => {
   }
 });
 
-// ===== PRODUCTS ROUTES (Protected) =====
+// ===== PRODUCTS ROUTES =====
 
-app.get('/api/products', isAuthenticated, async (req, res) => {
+app.get('/api/products', async (req, res) => {
   try {
     const { service_id, brand_id, refresh } = req.query;
     
@@ -551,7 +468,7 @@ app.get('/api/products', isAuthenticated, async (req, res) => {
     
     // Check cache
     if (!refresh) {
-      const cached = await Product.find({ service_id, brand_id });
+      const cached = productsOps.getByBrand(service_id, brand_id);
       if (cached.length > 0) {
         return res.json({
           success: true,
@@ -562,16 +479,13 @@ app.get('/api/products', isAuthenticated, async (req, res) => {
     }
     
     // Fetch from API
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.getProducts(service_id, brand_id);
     
     if (result.code === 20000001 && result.payload) {
       // Save to cache
       if (result.payload.product_list) {
-        await Product.deleteMany({ service_id, brand_id });
-        await Product.insertMany(
-          result.payload.product_list.map(p => ({...p, service_id, brand_id, fetched_at: Date.now()}))
-        );
+        productsOps.bulkUpsert(result.payload.product_list);
       }
       
       res.json({
@@ -591,11 +505,11 @@ app.get('/api/products', isAuthenticated, async (req, res) => {
 });
 
 // Get product attributes
-app.get('/api/products/:product_id/attributes', isAuthenticated, async (req, res) => {
+app.get('/api/products/:product_id/attributes', async (req, res) => {
   try {
     const { product_id } = req.params;
     
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.getProductAttributes(product_id);
     
     if (result.code === 20000001) {
@@ -614,20 +528,20 @@ app.get('/api/products/:product_id/attributes', isAuthenticated, async (req, res
   }
 });
 
-// ===== INVENTORY ROUTES (Protected) =====
+// ===== INVENTORY ROUTES =====
 
 // Upload code to inventory
-app.post('/api/inventory/:offer_id', isAuthenticated, async (req, res) => {
+app.post('/api/inventory/:offer_id', async (req, res) => {
   try {
     const { offer_id } = req.params;
     const codeData = req.body;
     
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.uploadCode(offer_id, codeData);
     
     if (result.code === 20000001 && result.payload) {
       // Save to local inventory
-      await InventoryItem.create({
+      inventoryOps.insert({
         item_id: result.payload.item_id,
         offer_id: result.payload.offer_id,
         content: codeData.content,
@@ -652,10 +566,10 @@ app.post('/api/inventory/:offer_id', isAuthenticated, async (req, res) => {
 });
 
 // Get inventory items for an offer
-app.get('/api/inventory/:offer_id', isAuthenticated, async (req, res) => {
+app.get('/api/inventory/:offer_id', (req, res) => {
   try {
     const { offer_id } = req.params;
-    const items = await InventoryItem.find({ offer_id }).sort({ createdAt: -1 });
+    const items = inventoryOps.getByOffer(offer_id);
     
     res.json({
       success: true,
@@ -667,16 +581,16 @@ app.get('/api/inventory/:offer_id', isAuthenticated, async (req, res) => {
 });
 
 // Delete inventory item
-app.delete('/api/inventory/:offer_id/:item_id', isAuthenticated, async (req, res) => {
+app.delete('/api/inventory/:offer_id/:item_id', async (req, res) => {
   try {
     const { offer_id, item_id } = req.params;
     
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.deleteCode(offer_id, item_id);
     
     if (result.code === 20000001) {
       // Remove from local inventory
-      await InventoryItem.deleteOne({ item_id });
+      inventoryOps.delete(item_id);
       
       res.json({
         success: true,
@@ -693,11 +607,11 @@ app.delete('/api/inventory/:offer_id/:item_id', isAuthenticated, async (req, res
   }
 });
 
-// ===== STORE ROUTES (Protected) =====
+// ===== STORE ROUTES =====
 
-app.get('/api/store', isAuthenticated, async (req, res) => {
+app.get('/api/store', async (req, res) => {
   try {
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.getStore();
     
     if (result.code === 20000001) {
@@ -716,22 +630,19 @@ app.get('/api/store', isAuthenticated, async (req, res) => {
   }
 });
 
-// ===== WEBHOOK LOGS ROUTES (Protected) =====
+// ===== WEBHOOK LOGS ROUTES =====
 
-app.post('/api/webhook-logs/search', isAuthenticated, async (req, res) => {
+app.post('/api/webhook-logs/search', async (req, res) => {
   try {
     const searchParams = req.body;
     
-    const client = await getG2GClient();
+    const client = getG2GClient();
     const result = await client.searchWebhookLogs(searchParams);
     
     if (result.code === 20000001 && result.payload) {
       // Save to cache
       if (result.payload.results) {
-        await WebhookLog.insertMany(
-          result.payload.results.map(log => ({...log, fetched_at: Date.now()})),
-          { ordered: false }
-        ).catch(() => {}); // Ignore duplicates
+        webhookLogsOps.bulkUpsert(result.payload.results);
       }
       
       res.json({
@@ -750,31 +661,30 @@ app.post('/api/webhook-logs/search', isAuthenticated, async (req, res) => {
 });
 
 // Get recent webhook logs from cache
-app.get('/api/webhook-logs', isAuthenticated, async (req, res) => {
+app.get('/api/webhook-logs', (req, res) => {
   try {
     const { limit = 50 } = req.query;
-    const logs = await WebhookLog.find()
-      .sort({ event_sent_at: -1 })
-      .limit(parseInt(limit));
+    const logs = webhookLogsOps.getRecent(parseInt(limit));
     
     res.json({
       success: true,
-      data: logs
+      data: logs.map(log => ({
+        ...log,
+        data_json: log.data_json ? JSON.parse(log.data_json) : null
+      }))
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// ===== STATS ROUTE (Protected) =====
+// ===== STATS ROUTE =====
 
-app.get('/api/stats', isAuthenticated, async (req, res) => {
+app.get('/api/stats', (req, res) => {
   try {
-    const [orders, offers, services] = await Promise.all([
-      Order.find(),
-      Offer.find(),
-      Service.find()
-    ]);
+    const orders = ordersOps.getAll();
+    const offers = offersOps.getAll();
+    const services = servicesOps.getAll();
     
     const totalOrders = orders.length;
     const totalOffers = offers.length;
@@ -797,14 +707,9 @@ app.get('/api/stats', isAuthenticated, async (req, res) => {
   }
 });
 
-// Health check (public)
+// Health check
 app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: Date.now(),
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    authenticated: req.isAuthenticated()
-  });
+  res.json({ status: 'ok', timestamp: Date.now() });
 });
 
 // Error handling middleware
@@ -820,9 +725,5 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 G2G CRM Backend running on http://localhost:${PORT}`);
   console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
-  console.log(`🔐 Discord OAuth: http://localhost:${PORT}/auth/discord`);
 });
-
-// Import mongoose for health check
-const mongoose = require('mongoose');
 
